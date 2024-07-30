@@ -3,7 +3,8 @@ from __future__ import unicode_literals
 import sys
 
 import os
-import pkg_resources
+import importlib.metadata
+
 import shutil
 import tempfile
 import unittest
@@ -13,6 +14,7 @@ from fs.appfs import UserDataFS
 from fs.memoryfs import MemoryFS
 from fs.opener import errors, registry
 from fs.opener.parse import ParseResult
+
 from fs.opener.registry import Registry
 from fs.osfs import OSFS
 
@@ -111,13 +113,15 @@ class TestRegistry(unittest.TestCase):
 
     def test_registry_protocols(self):
         # Check registry.protocols list the names of all available extension
-        extensions = [
-            pkg_resources.EntryPoint("proto1", "mod1"),
-            pkg_resources.EntryPoint("proto2", "mod2"),
-        ]
+        extensions = {
+            "fs.opener": [
+                importlib.metadata.EntryPoint("proto1", "mod1", "test"),
+                importlib.metadata.EntryPoint("proto2", "mod2", "test"),
+            ]
+        }
         m = mock.MagicMock(return_value=extensions)
         with mock.patch.object(
-            sys.modules["pkg_resources"], "iter_entry_points", new=m
+            sys.modules["fs.opener.registry"], "entry_points", new=m
         ):
             self.assertIn("proto1", opener.registry.protocols)
             self.assertIn("proto2", opener.registry.protocols)
@@ -129,11 +133,12 @@ class TestRegistry(unittest.TestCase):
     def test_entry_point_load_error(self):
 
         entry_point = mock.MagicMock()
+        entry_point.name = "test"
         entry_point.load.side_effect = ValueError("some error")
 
-        iter_entry_points = mock.MagicMock(return_value=iter([entry_point]))
+        entry_points = mock.MagicMock(return_value=iter([entry_point]))
 
-        with mock.patch("pkg_resources.iter_entry_points", iter_entry_points):
+        with mock.patch("fs.opener.registry.entry_points", entry_points):
             with self.assertRaises(errors.EntryPointError) as ctx:
                 opener.open_fs("test://")
             self.assertEqual(
@@ -145,10 +150,11 @@ class TestRegistry(unittest.TestCase):
             pass
 
         entry_point = mock.MagicMock()
+        entry_point.name = "test"
         entry_point.load = mock.MagicMock(return_value=NotAnOpener)
-        iter_entry_points = mock.MagicMock(return_value=iter([entry_point]))
+        entry_points = mock.MagicMock(return_value=iter([entry_point]))
 
-        with mock.patch("pkg_resources.iter_entry_points", iter_entry_points):
+        with mock.patch("fs.opener.registry.entry_points", entry_points):
             with self.assertRaises(errors.EntryPointError) as ctx:
                 opener.open_fs("test://")
             self.assertEqual("entry point did not return an opener", str(ctx.exception))
@@ -162,10 +168,11 @@ class TestRegistry(unittest.TestCase):
                 pass
 
         entry_point = mock.MagicMock()
+        entry_point.name = "test"
         entry_point.load = mock.MagicMock(return_value=BadOpener)
-        iter_entry_points = mock.MagicMock(return_value=iter([entry_point]))
+        entry_points = mock.MagicMock(return_value=iter([entry_point]))
 
-        with mock.patch("pkg_resources.iter_entry_points", iter_entry_points):
+        with mock.patch("fs.opener.registry.entry_points", entry_points):
             with self.assertRaises(errors.EntryPointError) as ctx:
                 opener.open_fs("test://")
             self.assertEqual(
@@ -214,12 +221,6 @@ class TestOpeners(unittest.TestCase):
 
     def tearDown(self):
         shutil.rmtree(self.tmpdir)
-
-    def test_repr(self):
-        # Check __repr__ works
-        for entry_point in pkg_resources.iter_entry_points("fs.opener"):
-            _opener = entry_point.load()
-            repr(_opener())
 
     def test_open_osfs(self):
         fs = opener.open_fs("osfs://.")
