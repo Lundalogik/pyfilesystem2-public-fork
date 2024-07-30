@@ -8,7 +8,7 @@ import typing
 
 import collections
 import contextlib
-import pkg_resources
+from importlib.metadata import entry_points
 
 from ..errors import ResourceReadOnly
 from .base import Opener
@@ -74,9 +74,10 @@ class Registry(object):
         """`list`: the list of supported protocols."""
         _protocols = list(self._protocols)
         if self.load_extern:
+            eps = entry_points()
             _protocols.extend(
                 entry_point.name
-                for entry_point in pkg_resources.iter_entry_points("fs.opener")
+                for entry_point in eps.get("fs.opener") or []
             )
             _protocols = list(collections.OrderedDict.fromkeys(_protocols))
         return _protocols
@@ -102,9 +103,11 @@ class Registry(object):
         protocol = protocol or self.default_opener
 
         if self.load_extern:
+            eps = entry_points(group="fs.opener")
             entry_point = next(
-                pkg_resources.iter_entry_points("fs.opener", protocol), None
+                (ep for ep in eps if ep.name == protocol), None
             )
+
         else:
             entry_point = None
 
